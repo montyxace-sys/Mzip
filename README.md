@@ -1,5 +1,7 @@
 # Mzip
 
+App para comprimir y extraer ficheros, documentos, etc. Rápido, eficaz y open source.
+
 Compresor y extractor de archivos para Windows con interfaz oscura, escrito en WPF sobre .NET 10.
 
 Mzip se distribuye de dos formas: un único `Mzip.exe` portable que no necesita instalación, y
@@ -63,4 +65,4 @@ src/MzipSetupExe    Instalador WPF que incrusta Mzip.exe como recurso
 
 ## Licencia
 
-[MIT](LICENSE) © 2026 MSoft · [msoft.com.es](https://msoft.com.es)
+[MIT](LICENSE) © 2026 montyxace-sys · [msoft.com.es](https://msoft.com.es)
