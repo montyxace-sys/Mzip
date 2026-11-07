@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
-using System.Security.Principal;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -43,6 +42,8 @@ public partial class MainWindow : Window
         ExtractDestBox.Text = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
 
         UpdateAdminState();
+        var version = typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "1.1.0";
+        VersionLabel.Text = $"v{version} · MSoft";
         UpdateFilesState();
         UpdateOutputHint();
         SetStatus("Listo. Añade archivos o abre un comprimido.");
@@ -111,27 +112,25 @@ public partial class MainWindow : Window
 
     private void UpdateAdminState()
     {
-        bool isAdmin;
-        try
+        var accent = (Brush)FindResource(Elevation.IsElevated ? "SuccessBrush" : "MutedBrush");
+
+        if (Elevation.IsElevated)
         {
-            using var identity = WindowsIdentity.GetCurrent();
-            isAdmin = new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
+            AdminText.Text = "Administrador";
+            AdminBadge.Background = new SolidColorBrush(Color.FromRgb(0x15, 0x2A, 0x22));
+            AdminBadge.BorderBrush = new SolidColorBrush(Color.FromRgb(0x23, 0x50, 0x3A));
+            AdminBadge.ToolTip = "Mzip se ejecuta con permisos de administrador.";
         }
-        catch
+        else
         {
-            isAdmin = false;
+            AdminText.Text = "Modo estándar";
+            AdminBadge.Background = new SolidColorBrush(Color.FromRgb(0x16, 0x1E, 0x29));
+            AdminBadge.BorderBrush = new SolidColorBrush(Color.FromRgb(0x25, 0x31, 0x3E));
+            AdminBadge.ToolTip = "Se pedirán permisos de administrador solo si el destino lo requiere.";
         }
 
-        var accent = (Brush)FindResource(isAdmin ? "SuccessBrush" : "DangerBrush");
-        AdminText.Text = isAdmin ? "Administrador" : "Sin privilegios";
         AdminText.Foreground = accent;
         AdminDot.Fill = accent;
-        AdminBadge.Background = new SolidColorBrush(isAdmin
-            ? Color.FromRgb(0x15, 0x2A, 0x22)
-            : Color.FromRgb(0x2A, 0x17, 0x17));
-        AdminBadge.BorderBrush = new SolidColorBrush(isAdmin
-            ? Color.FromRgb(0x23, 0x50, 0x3A)
-            : Color.FromRgb(0x53, 0x2D, 0x2D));
     }
 
     // ---------- Selección de archivos ----------
@@ -291,6 +290,24 @@ public partial class MainWindow : Window
         {
             Progress.Value = 0;
             SetStatus("Compresión cancelada.");
+        }
+        catch (Exception ex) when (IsAccessDenied(ex) && !Elevation.IsElevated)
+        {
+            EndOperation();
+            if (ConfirmElevation(destination))
+            {
+                await CompressElevatedAsync(new JobRequest
+                {
+                    Type = "compress",
+                    ArchivePath = output,
+                    Format = format == ArchiveFormat.Tar ? "tar" : "zip",
+                    Files = _files.Select(item => item.SourcePath).ToList()
+                }, destination, name);
+            }
+            else
+            {
+                SetStatus("Operación cancelada: permisos insuficientes.");
+            }
         }
         catch (Exception ex)
         {
@@ -483,6 +500,25 @@ public partial class MainWindow : Window
             Progress.Value = 0;
             SetStatus("Extracción cancelada.");
         }
+        catch (Exception ex) when (IsAccessDenied(ex) && !Elevation.IsElevated)
+        {
+            EndOperation();
+            if (ConfirmElevation(destination))
+            {
+                await ExtractElevatedAsync(new JobRequest
+                {
+                    Type = "extract",
+                    ArchivePath = _archivePath,
+                    Destination = destination,
+                    Password = ExtractPassword.Password,
+                    Overwrite = OverwriteCheck.IsChecked == true
+                }, destination);
+            }
+            else
+            {
+                SetStatus("Operación cancelada: permisos insuficientes.");
+            }
+        }
         catch (Exception ex)
         {
             ShowError("No se pudo extraer", ex);
@@ -596,6 +632,103 @@ public partial class MainWindow : Window
             SetStatus("Cancela la operación antes de cerrar.");
         }
         base.OnClosing(e);
+    }
+
+    // ---------- Elevación bajo demanda ----------
+
+    private static bool IsAccessDenied(Exception ex) =>
+        ex is UnauthorizedAccessException ||
+        (ex is IOException && (ex.HResult & 0xFFFF) == 5);
+
+    private bool ConfirmElevation(string target)
+    {
+        var answer = MessageBox.Show(this,
+            $"Windows no permite escribir en:\n{target}\n\n¿Reintentar la operación con permisos de administrador?",
+            "Mzip", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        return answer == MessageBoxResult.Yes;
+    }
+
+    private async Task CompressElevatedAsync(JobRequest request, string destination, string name)
+    {
+        BeginOperation("Solicitando permisos de administrador…");
+        Progress.IsIndeterminate = true;
+
+        try
+        {
+            var result = await Elevation.RunElevatedAsync(request, _cts!.Token,
+                () => SetStatus("Comprimiendo como administrador…"));
+            if (!result.Success)
+                throw new InvalidOperationException(result.Error ?? "La operación elevada no se completó.");
+
+            _lastFolder = destination;
+            OpenFolderButton.Visibility = Visibility.Visible;
+            Progress.IsIndeterminate = false;
+            Progress.Value = 100;
+
+            var size = new FileInfo(request.ArchivePath!).Length;
+            SetStatus($"Creado «{name}» · {result.Count} archivo(s) · {FileItem.FormatSize(size)}");
+        }
+        catch (OperationCanceledException)
+        {
+            Progress.Value = 0;
+            SetStatus("Compresión cancelada.");
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
+        {
+            Progress.Value = 0;
+            SetStatus("Permisos de administrador no concedidos.");
+        }
+        catch (Exception ex)
+        {
+            ShowError("No se pudo comprimir", ex);
+        }
+        finally
+        {
+            Progress.IsIndeterminate = false;
+            EndOperation();
+        }
+    }
+
+    private async Task ExtractElevatedAsync(JobRequest request, string destination)
+    {
+        BeginOperation("Solicitando permisos de administrador…");
+        Progress.IsIndeterminate = true;
+
+        try
+        {
+            var result = await Elevation.RunElevatedAsync(request, _cts!.Token,
+                () => SetStatus("Extrayendo como administrador…"));
+            if (!result.Success)
+                throw new InvalidOperationException(result.Error ?? "La operación elevada no se completó.");
+
+            _lastFolder = destination;
+            OpenFolderButton.Visibility = Visibility.Visible;
+            Progress.IsIndeterminate = false;
+            Progress.Value = 100;
+
+            var text = $"Extraídos {result.Count} archivo(s)";
+            if (result.Skipped > 0) text += $" · {result.Skipped} omitido(s)";
+            SetStatus($"{text} en {destination}");
+        }
+        catch (OperationCanceledException)
+        {
+            Progress.Value = 0;
+            SetStatus("Extracción cancelada.");
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
+        {
+            Progress.Value = 0;
+            SetStatus("Permisos de administrador no concedidos.");
+        }
+        catch (Exception ex)
+        {
+            ShowError("No se pudo extraer", ex);
+        }
+        finally
+        {
+            Progress.IsIndeterminate = false;
+            EndOperation();
+        }
     }
 
     // ---------- Utilidades ----------

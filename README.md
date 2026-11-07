@@ -20,15 +20,17 @@ la desinstalación en Windows.
 - Progreso real medido en bytes y estado detallado.
 - Instalador con instalación por máquina, accesos directos, desinstalador y registro en
   «Aplicaciones instaladas».
+- Arranque sin UAC: solo se piden permisos de administrador si el destino los necesita,
+  mediante un proceso auxiliar que ejecuta esa operación concreta.
 
 ## Requisitos
 
 - Windows 10 u 11 de 64 bits.
 - Para compilar: [SDK de .NET 10](https://dotnet.microsoft.com/download).
 
-Mzip pide elevación (UAC) al iniciarse para poder comprimir y extraer en cualquier carpeta,
-incluidas las protegidas del sistema. Como consecuencia, Windows bloquea el arrastrar y soltar
-desde el Explorador hacia la ventana; usa los botones de la barra superior en su lugar.
+Mzip arranca con permisos normales, sin aviso de UAC, y mantiene el arrastrar y soltar desde el
+Explorador. Si eliges un destino protegido (por ejemplo `Program Files` o la raíz de una unidad),
+la aplicación pregunta y reintenta esa operación con permisos de administrador sin cerrarse.
 
 ## Descarga
 

@@ -56,7 +56,7 @@
                                    Foreground="{StaticResource SuccessBrush}" Margin="7,0,0,0" />
                     </StackPanel>
                 </Border>
-                <TextBlock Text="v1.0.0 · MSoft" FontSize="10.5" Foreground="{StaticResource FaintBrush}"
+                <TextBlock x:Name="VersionLabel" Text="v1.1.0 · MSoft" FontSize="10.5" Foreground="{StaticResource FaintBrush}"
                            HorizontalAlignment="Right" Margin="0,6,2,0" />
             </StackPanel>
         </Grid>
@@ -131,7 +131,7 @@
 
                     <TextBlock Grid.Row="2" Margin="2,8,0,0" FontSize="10.5" TextWrapping="Wrap"
                                Foreground="{StaticResource FaintBrush}"
-                               Text="Ejecutándose como administrador, Windows puede bloquear el arrastre desde el Explorador. Usa los botones si ocurre." />
+                               Text="También acepta carpetas completas; se conservan sus nombres y las carpetas vacías." />
 
                     <Grid Grid.Row="3" Margin="0,12,0,0">
                         <ListBox x:Name="FilesList" ItemContainerStyle="{StaticResource RowItem}"

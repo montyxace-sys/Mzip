@@ -19,6 +19,25 @@ public partial class App : Application
             Log(args.Exception);
             args.SetObserved();
         };
+
+        var jobPath = Elevation.GetJobPath(e.Args);
+        if (jobPath is not null)
+        {
+            // Modo trabajador: lo lanza Mzip con permisos elevados para una operación concreta.
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            _ = RunJobAsync(jobPath);
+            return;
+        }
+
+        var window = new MainWindow();
+        MainWindow = window;
+        window.Show();
+    }
+
+    private static async Task RunJobAsync(string jobPath)
+    {
+        var exitCode = await Elevation.ExecuteJobAsync(jobPath);
+        Application.Current.Shutdown(exitCode);
     }
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
