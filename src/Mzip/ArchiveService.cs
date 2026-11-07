@@ -1,15 +1,53 @@
 using System.Diagnostics;
-using System.Formats.Tar;
 using System.IO;
 using System.IO.Compression;
+using System.Text;
+using System.Text.RegularExpressions;
+using SharpCompress.Archives;
+using SharpCompress.Common;
+using SharpCompress.Common.Tar.Headers;
 using SharpCompress.Readers;
+using SharpCompress.Writers.Tar;
 
 namespace Mzip;
 
 public enum ArchiveFormat
 {
     Zip,
-    Tar
+    SevenZip,
+    Tar,
+    TarGz,
+    TarBz2
+}
+
+public static class ArchiveFormatInfo
+{
+    public static string Extension(this ArchiveFormat format) => format switch
+    {
+        ArchiveFormat.SevenZip => ".7z",
+        ArchiveFormat.TarGz => ".tar.gz",
+        ArchiveFormat.TarBz2 => ".tar.bz2",
+        ArchiveFormat.Tar => ".tar",
+        _ => ".zip"
+    };
+
+    public static string Key(this ArchiveFormat format) => format switch
+    {
+        ArchiveFormat.SevenZip => "7z",
+        ArchiveFormat.TarGz => "tar.gz",
+        ArchiveFormat.TarBz2 => "tar.bz2",
+        ArchiveFormat.Tar => "tar",
+        _ => "zip"
+    };
+
+    public static ArchiveFormat Parse(string? key) => key?.ToLowerInvariant() switch
+    {
+        "7z" => ArchiveFormat.SevenZip,
+        "tar.gz" or "tgz" => ArchiveFormat.TarGz,
+        "tar.bz2" or "tbz2" => ArchiveFormat.TarBz2,
+        "tar" => ArchiveFormat.Tar,
+        _ => ArchiveFormat.Zip
+    };
 }
 
 public readonly record struct ProgressInfo(double Percent, string Message);
@@ -29,6 +67,8 @@ public static class ArchiveService
         ".zip", ".tar", ".7z", ".rar", ".gz", ".tgz", ".bz2", ".tbz2", ".xz", ".txz", ".cab", ".lz", ".zst"
     };
 
+    private static readonly Regex PercentPattern = new(@"(?<!\d)(\d{1,3})%", RegexOptions.Compiled);
+
     public static bool IsArchive(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) return false;
@@ -41,6 +81,19 @@ public static class ArchiveService
         if (!string.IsNullOrEmpty(password)) options.Password = password;
 
         var entries = new List<ArchiveEntryItem>();
+        if (IsSevenZip(archivePath))
+        {
+            // El lector secuencial no soporta 7z; el archivo sí (incluidos los sólidos).
+            using var archive = ArchiveFactory.OpenArchive(archivePath, options);
+            foreach (var entry in archive.Entries)
+            {
+                var key = NormalizeKey(entry.Key);
+                if (key.Length == 0) continue;
+                entries.Add(new ArchiveEntryItem(key, entry.Size, entry.IsDirectory || key.EndsWith('/')));
+            }
+            return entries;
+        }
+
         using var reader = ReaderFactory.OpenReader(archivePath, options);
         while (reader.MoveToNextEntry())
         {
@@ -60,7 +113,7 @@ public static class ArchiveService
         IProgress<ProgressInfo>? progress,
         CancellationToken cancellationToken)
     {
-        return Task.Run(() =>
+        return Task.Run(async () =>
         {
             var directory = Path.GetDirectoryName(outputPath);
             if (string.IsNullOrEmpty(directory)) throw new InvalidOperationException("La carpeta de destino no es válida.");
@@ -88,7 +141,11 @@ public static class ArchiveService
 
                 Report(Path.GetFileName(outputPath), true);
 
-                if (format == ArchiveFormat.Zip)
+                if (format == ArchiveFormat.SevenZip)
+                {
+                    await CompressSevenZipAsync(items, tempPath, progress, cancellationToken);
+                }
+                else if (format == ArchiveFormat.Zip)
                 {
                     using var file = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, BufferSize);
                     using var zip = new ZipArchive(file, ZipArchiveMode.Create);
@@ -98,7 +155,7 @@ public static class ArchiveService
                     foreach (var job in jobs)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        var entry = zip.CreateEntry(job.EntryPath, CompressionLevel.Optimal);
+                        var entry = zip.CreateEntry(job.EntryPath, CompressionLevel.SmallestSize);
                         entry.LastWriteTime = ClampZipTime(job.LastWrite);
 
                         using var input = new FileStream(job.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, FileOptions.SequentialScan);
@@ -116,13 +173,22 @@ public static class ArchiveService
                 }
                 else
                 {
+                    var compression = format switch
+                    {
+                        ArchiveFormat.TarGz => CompressionType.GZip,
+                        ArchiveFormat.TarBz2 => CompressionType.BZip2,
+                        _ => CompressionType.None
+                    };
+
                     using var file = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, BufferSize);
-                    using var writer = new TarWriter(file, TarEntryFormat.Pax, leaveOpen: true);
+                    using var writer = new TarWriter(file, new TarWriterOptions(compression, finalizeArchiveOnClose: true)
+                    {
+                        HeaderFormat = TarHeaderWriteFormat.GNU_TAR_LONG_LINK,
+                        CompressionLevel = 9
+                    });
+
                     foreach (var dir in emptyDirectories)
-                        writer.WriteEntry(new PaxTarEntry(TarEntryType.Directory, dir + "/")
-                        {
-                            ModificationTime = DateTimeOffset.Now
-                        });
+                        writer.WriteDirectory(dir + "/", DateTime.Now);
 
                     foreach (var job in jobs)
                     {
@@ -133,12 +199,7 @@ public static class ArchiveService
                             done += bytes;
                             Report(job.EntryPath);
                         });
-                        var entry = new PaxTarEntry(TarEntryType.RegularFile, job.EntryPath)
-                        {
-                            DataStream = tracked,
-                            ModificationTime = new DateTimeOffset(job.LastWrite)
-                        };
-                        writer.WriteEntry(entry);
+                        writer.Write(job.EntryPath, tracked, job.LastWrite, job.Length);
                     }
                 }
 
@@ -159,6 +220,137 @@ public static class ArchiveService
                 }
             }
         }, cancellationToken);
+    }
+
+    private static async Task CompressSevenZipAsync(
+        IReadOnlyList<FileItem> items,
+        string archivePath,
+        IProgress<ProgressInfo>? progress,
+        CancellationToken cancellationToken)
+    {
+        var tool = await SevenZipTool.GetPathAsync(cancellationToken);
+        var totalBytes = items.Sum(item => item.Size);
+        long done = 0;
+
+        foreach (var item in items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var percent = totalBytes > 0 ? Math.Clamp(done * 100.0 / totalBytes, 0, 100) : 0;
+            progress?.Report(new ProgressInfo(percent,
+                $"Comprimiendo {item.Name} · {FileItem.FormatSize(done)} de {FileItem.FormatSize(totalBytes)}"));
+
+            await RunSevenZipAddAsync(tool, archivePath, item, done, totalBytes, progress, cancellationToken);
+            done += item.Size;
+        }
+    }
+
+    private static async Task RunSevenZipAddAsync(
+        string tool,
+        string archivePath,
+        FileItem item,
+        long completed,
+        long totalBytes,
+        IProgress<ProgressInfo>? progress,
+        CancellationToken cancellationToken)
+    {
+        var workingDirectory = Path.GetDirectoryName(item.SourcePath);
+        if (string.IsNullOrEmpty(workingDirectory))
+            throw new InvalidOperationException($"No se puede comprimir «{item.SourcePath}».");
+
+        var startInfo = new ProcessStartInfo(tool)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
+        };
+
+        // El nombre relativo evita guardar rutas absolutas dentro del archivo 7z.
+        foreach (var argument in new[] { "a", "-t7z", "-mx=9", "-y", "-bsp1", archivePath, item.Name })
+            startInfo.ArgumentList.Add(argument);
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("No se pudo iniciar el compresor 7-Zip.");
+
+        var errors = new StringBuilder();
+        var stopwatch = Stopwatch.StartNew();
+        long lastReport = -ReportIntervalMs;
+
+        var stdoutPump = PumpAsync(process.StandardOutput, line =>
+        {
+            var match = PercentPattern.Match(line);
+            if (!match.Success || !int.TryParse(match.Groups[1].Value, out var itemPercent)) return;
+            if (stopwatch.ElapsedMilliseconds - lastReport < ReportIntervalMs) return;
+            lastReport = stopwatch.ElapsedMilliseconds;
+
+            itemPercent = Math.Clamp(itemPercent, 0, 100);
+            var percent = totalBytes > 0
+                ? Math.Clamp((completed + item.Size * itemPercent / 100.0) * 100.0 / totalBytes, 0, 100)
+                : 0;
+            progress?.Report(new ProgressInfo(percent,
+                $"Comprimiendo {item.Name} · {itemPercent}% · {FileItem.FormatSize(completed)} de {FileItem.FormatSize(totalBytes)}"));
+        });
+        var stderrPump = PumpAsync(process.StandardError, line => errors.AppendLine(line));
+
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                if (!process.HasExited) process.Kill(entireProcessTree: true);
+            }
+            catch
+            {
+                // El proceso pudo terminar entre la comprobación y la finalización.
+            }
+            throw;
+        }
+        finally
+        {
+            try { await Task.WhenAll(stdoutPump, stderrPump); } catch { }
+        }
+
+        // 0 = correcto; 1 = aviso (algún archivo ilegible) pero archivo creado.
+        if (process.ExitCode > 1)
+        {
+            var detail = errors.ToString().Trim();
+            throw new IOException(detail.Length > 0
+                ? detail
+                : $"7-Zip terminó con el código {process.ExitCode}.");
+        }
+    }
+
+    // 7-Zip separa el progreso con \r, así que no sirve BeginOutputReadLine.
+    private static async Task PumpAsync(StreamReader reader, Action<string> onLine)
+    {
+        var buffer = new char[1024];
+        var line = new StringBuilder();
+        int read;
+        while ((read = await reader.ReadAsync(buffer.AsMemory())) > 0)
+        {
+            for (var i = 0; i < read; i++)
+            {
+                var character = buffer[i];
+                if (character is '\r' or '\n')
+                {
+                    if (line.Length == 0) continue;
+                    onLine(line.ToString());
+                    line.Clear();
+                }
+                else
+                {
+                    line.Append(character);
+                }
+            }
+        }
+
+        if (line.Length > 0) onLine(line.ToString());
     }
 
     public static Task<ExtractResult> ExtractAsync(
@@ -198,71 +390,116 @@ public static class ArchiveService
                 progress?.Report(new ProgressInfo(percent, message));
             }
 
+            void CopyEntry(Stream input, string target, string key)
+            {
+                using var output = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None, BufferSize);
+                var buffer = new byte[BufferSize];
+                int read;
+                while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    output.Write(buffer, 0, read);
+                    done += read;
+                    Report(key);
+                }
+            }
+
             Report(Path.GetFileName(archivePath), true);
 
-            using var reader = ReaderFactory.OpenReader(archivePath, options);
-            while (reader.MoveToNextEntry())
+            if (IsSevenZip(archivePath))
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var entry = reader.Entry;
-                if (entry is null) continue;
-
-                var key = NormalizeKey(entry.Key);
-                if (key.Length == 0) continue;
-
-                var target = ResolveTarget(root, rootPrefix, key);
-                var isDirectory = entry.IsDirectory || key.EndsWith('/');
-                if (isDirectory)
+                using var archive = ArchiveFactory.OpenArchive(archivePath, options);
+                foreach (var entry in archive.Entries)
                 {
-                    Directory.CreateDirectory(target);
-                    continue;
-                }
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var key = NormalizeKey(entry.Key);
+                    if (key.Length == 0) continue;
 
-                // Los enlaces simbólicos de un archivo no deben poder escribir fuera del destino.
-                if (!string.IsNullOrEmpty(entry.LinkTarget))
-                {
-                    using (var drain = reader.OpenEntryStream()) drain.CopyTo(Stream.Null);
-                    skipped++;
-                    continue;
-                }
-
-                if (!overwrite && File.Exists(target))
-                {
-                    using (var drain = reader.OpenEntryStream()) drain.CopyTo(Stream.Null);
-                    skipped++;
-                    continue;
-                }
-
-                var parent = Path.GetDirectoryName(target);
-                if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
-
-                using (var input = reader.OpenEntryStream())
-                using (var output = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None, BufferSize))
-                {
-                    var buffer = new byte[BufferSize];
-                    int read;
-                    while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+                    var target = ResolveTarget(root, rootPrefix, key);
+                    var isDirectory = entry.IsDirectory || key.EndsWith('/');
+                    if (isDirectory)
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        output.Write(buffer, 0, read);
-                        done += read;
-                        Report(key);
+                        Directory.CreateDirectory(target);
+                        continue;
                     }
-                }
 
-                if (entry.LastModifiedTime.HasValue)
+                    if (!string.IsNullOrEmpty(entry.LinkTarget) || (!overwrite && File.Exists(target)))
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    var parent = Path.GetDirectoryName(target);
+                    if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
+
+                    using (var input = entry.OpenEntryStream()) CopyEntry(input, target, key);
+
+                    if (entry.LastModifiedTime.HasValue)
+                    {
+                        try { File.SetLastWriteTime(target, entry.LastModifiedTime.Value); }
+                        catch { }
+                    }
+
+                    extracted++;
+                }
+            }
+            else
+            {
+                using var reader = ReaderFactory.OpenReader(archivePath, options);
+                while (reader.MoveToNextEntry())
                 {
-                    try { File.SetLastWriteTime(target, entry.LastModifiedTime.Value); }
-                    catch { }
-                }
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var entry = reader.Entry;
+                    if (entry is null) continue;
 
-                extracted++;
+                    var key = NormalizeKey(entry.Key);
+                    if (key.Length == 0) continue;
+
+                    var target = ResolveTarget(root, rootPrefix, key);
+                    var isDirectory = entry.IsDirectory || key.EndsWith('/');
+                    if (isDirectory)
+                    {
+                        Directory.CreateDirectory(target);
+                        continue;
+                    }
+
+                    // Los enlaces simbólicos de un archivo no deben poder escribir fuera del destino.
+                    if (!string.IsNullOrEmpty(entry.LinkTarget))
+                    {
+                        using (var drain = reader.OpenEntryStream()) drain.CopyTo(Stream.Null);
+                        skipped++;
+                        continue;
+                    }
+
+                    if (!overwrite && File.Exists(target))
+                    {
+                        using (var drain = reader.OpenEntryStream()) drain.CopyTo(Stream.Null);
+                        skipped++;
+                        continue;
+                    }
+
+                    var parent = Path.GetDirectoryName(target);
+                    if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
+
+                    using (var input = reader.OpenEntryStream()) CopyEntry(input, target, key);
+
+                    if (entry.LastModifiedTime.HasValue)
+                    {
+                        try { File.SetLastWriteTime(target, entry.LastModifiedTime.Value); }
+                        catch { }
+                    }
+
+                    extracted++;
+                }
             }
 
             progress?.Report(new ProgressInfo(100, $"Extraídos {extracted} archivo(s)."));
             return new ExtractResult(extracted, skipped);
         }, cancellationToken);
     }
+
+    private static bool IsSevenZip(string path) =>
+        string.Equals(Path.GetExtension(path), ".7z", StringComparison.OrdinalIgnoreCase);
 
     private readonly record struct FileJob(string SourcePath, string EntryPath, long Length, DateTime LastWrite);
 

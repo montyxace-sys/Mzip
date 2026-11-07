@@ -29,15 +29,47 @@ public partial class App : Application
             return;
         }
 
+        var registration = ShellArguments.RegistrationCommand(e.Args);
+        if (registration is not null)
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            RunRegistration(registration.Value);
+            return;
+        }
+
         var window = new MainWindow();
         MainWindow = window;
         window.Show();
+
+        var request = ShellArguments.Parse(e.Args);
+        if (request is not null)
+        {
+            window.Dispatcher.BeginInvoke(DispatcherPriority.Background,
+                new Action(() => _ = window.RunShellAsync(request)));
+        }
     }
 
     private static async Task RunJobAsync(string jobPath)
     {
         var exitCode = await Elevation.ExecuteJobAsync(jobPath);
         Application.Current.Shutdown(exitCode);
+    }
+
+    private static void RunRegistration(bool enable)
+    {
+        Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+        {
+            var exitCode = 0;
+            try
+            {
+                ShellIntegration.Apply(enable);
+            }
+            catch
+            {
+                exitCode = 1;
+            }
+            Application.Current.Shutdown(exitCode);
+        }));
     }
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

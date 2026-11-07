@@ -188,12 +188,20 @@
                         <TextBlock Text="Opciones" Style="{StaticResource H1}" />
 
                         <TextBlock Text="Formato de salida" Foreground="{StaticResource MutedBrush}" FontSize="11.5" Margin="0,16,0,7" />
-                        <StackPanel Orientation="Horizontal">
+                        <WrapPanel>
                             <RadioButton x:Name="ZipFormatTab" Content="ZIP" Style="{StaticResource FormatPill}"
-                                         GroupName="format" IsChecked="True" Checked="Options_Checked" />
+                                         GroupName="format" IsChecked="True" Checked="Options_Checked" Margin="0,0,8,8" />
+                            <RadioButton x:Name="SevenZipFormatTab" Content="7Z" Style="{StaticResource FormatPill}"
+                                         GroupName="format" Checked="Options_Checked" Margin="0,0,8,8" />
                             <RadioButton x:Name="TarFormatTab" Content="TAR" Style="{StaticResource FormatPill}"
-                                         GroupName="format" Margin="8,0,0,0" Checked="Options_Checked" />
-                        </StackPanel>
+                                         GroupName="format" Checked="Options_Checked" Margin="0,0,8,8" />
+                            <RadioButton x:Name="TarGzFormatTab" Content="TAR.GZ" Style="{StaticResource FormatPill}"
+                                         GroupName="format" Checked="Options_Checked" Margin="0,0,8,8" />
+                            <RadioButton x:Name="TarBz2FormatTab" Content="TAR.BZ2" Style="{StaticResource FormatPill}"
+                                         GroupName="format" Checked="Options_Checked" Margin="0,0,8,8" />
+                        </WrapPanel>
+                        <TextBlock Text="7Z comprime más (LZMA2). TAR.GZ y TAR.BZ2 son los estándar de Linux y macOS."
+                                   FontSize="10.5" TextWrapping="Wrap" Foreground="{StaticResource FaintBrush}" Margin="2,0,0,0" />
 
                         <TextBlock Text="Nombre del archivo" Foreground="{StaticResource MutedBrush}" FontSize="11.5" Margin="0,16,0,7" />
                         <TextBox x:Name="ArchiveNameBox" Style="{StaticResource Input}" TextChanged="Options_TextChanged" />
@@ -222,7 +230,7 @@
                                 Height="44" Margin="0,16,0,0" FontSize="13.5" Click="Compress_Click" />
 
                         <TextBlock Margin="2,12,0,0" FontSize="10.5" TextWrapping="Wrap" Foreground="{StaticResource FaintBrush}"
-                                   Text="Salida en ZIP y TAR. Se conservan las carpetas y los archivos vacíos." />
+                                   Text="Se conservan las carpetas, las carpetas vacías y las fechas de modificación." />
                     </StackPanel>
                 </ScrollViewer>
             </Border>
@@ -349,6 +357,17 @@
                         <Border Background="{StaticResource Surface2Brush}" CornerRadius="10" Padding="12,10" Margin="0,14,0,0">
                             <CheckBox x:Name="OverwriteCheck" Content="Sobrescribir archivos existentes"
                                       Style="{StaticResource ModernCheck}" IsChecked="True" />
+                        </Border>
+
+                        <Border Background="{StaticResource Surface2Brush}" CornerRadius="10" Padding="12,10" Margin="0,10,0,0">
+                            <StackPanel>
+                                <CheckBox x:Name="ShellIntegrationCheck" Content="Añadir al menú contextual de Windows"
+                                          Style="{StaticResource ModernCheck}"
+                                          Checked="ShellIntegration_Toggled" Unchecked="ShellIntegration_Toggled" />
+                                <TextBlock Text="«Extraer aquí», «Extraer en una subcarpeta» y «Comprimir con Mzip» al pulsar con el botón derecho."
+                                           FontSize="10" TextWrapping="Wrap" Foreground="{StaticResource FaintBrush}"
+                                           Margin="0,5,0,0" />
+                            </StackPanel>
                         </Border>
 
                         <Border Background="{StaticResource Surface2Brush}" CornerRadius="10" Padding="12,10" Margin="0,10,0,0">

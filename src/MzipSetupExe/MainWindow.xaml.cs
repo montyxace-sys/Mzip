@@ -190,10 +190,11 @@ public partial class MainWindow : Window
             try
             {
                 RegisterUninstall(target, payloadSize);
+                RegisterShellIntegration(target, ShellCheck.IsChecked == true);
             }
             catch (Exception ex)
             {
-                warnings.Add("Registro de desinstalación: " + ex.Message);
+                warnings.Add("Registro de Windows: " + ex.Message);
             }
 
             Progress.Value = 100;
@@ -203,6 +204,7 @@ public partial class MainWindow : Window
             BrowseButton.IsEnabled = false;
             DesktopCheck.IsEnabled = false;
             StartMenuCheck.IsEnabled = false;
+            ShellCheck.IsEnabled = false;
 
             StatusText.Text = warnings.Count == 0
                 ? $"{AppName} instalado correctamente en {target}"
@@ -239,7 +241,7 @@ public partial class MainWindow : Window
 
         var controls = new FrameworkElement[]
         {
-            DestBox, BrowseButton, DesktopCheck, StartMenuCheck, LaunchCheck, CloseButton
+            DestBox, BrowseButton, DesktopCheck, StartMenuCheck, ShellCheck, LaunchCheck, CloseButton
         };
         foreach (var c in controls) c.IsEnabled = !busy;
         InstallButton.IsEnabled = !busy;
@@ -310,6 +312,7 @@ public partial class MainWindow : Window
         {
             "@echo off",
             "setlocal",
+            "if exist \"%~dp0Mzip.exe\" \"%~dp0Mzip.exe\" --unregister-shell >nul 2>&1",
             "taskkill /IM Mzip.exe /F >nul 2>&1",
             $"reg delete \"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{AppName}\" /f >nul 2>&1",
             "del /f /q \"%PUBLIC%\\Desktop\\Mzip.lnk\" >nul 2>&1",
@@ -321,6 +324,20 @@ public partial class MainWindow : Window
             ""
         };
         File.WriteAllLines(cmdPath, lines);
+    }
+
+    private static void RegisterShellIntegration(string targetDir, bool enabled)
+    {
+        if (!enabled) return;
+
+        var exePath = Path.Combine(targetDir, AppName + ".exe");
+        using var process = Process.Start(new ProcessStartInfo(exePath, "--register-shell")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden
+        });
+        process?.WaitForExit(15000);
     }
 
     private static void CreateShortcuts(string targetDir, bool desktop, bool startMenu)

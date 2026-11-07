@@ -143,9 +143,7 @@ internal static class Elevation
                         items.Add(await FileItem.CreateAsync(source));
                     }
 
-                    var format = job.Format.Equals("tar", StringComparison.OrdinalIgnoreCase)
-                        ? ArchiveFormat.Tar
-                        : ArchiveFormat.Zip;
+                    var format = ArchiveFormatInfo.Parse(job.Format);
                     result.Count = await ArchiveService.CompressAsync(
                         items, output, format, null, CancellationToken.None);
                     break;

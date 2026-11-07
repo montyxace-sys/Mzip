@@ -23,6 +23,7 @@ public partial class MainWindow : Window
 
     private CancellationTokenSource? _cts;
     private bool _busy;
+    private bool _shellInitializing;
     private string? _archivePath;
     private long _archiveUncompressed;
     private int _archiveEntriesCount;
@@ -42,10 +43,11 @@ public partial class MainWindow : Window
         ExtractDestBox.Text = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
 
         UpdateAdminState();
-        var version = typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "1.1.0";
+        var version = typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "1.2.0";
         VersionLabel.Text = $"v{version} · MSoft";
         UpdateFilesState();
         UpdateOutputHint();
+        UpdateShellIntegrationState();
         SetStatus("Listo. Añade archivos o abre un comprimido.");
     }
 
@@ -234,7 +236,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var format = TarFormatTab.IsChecked == true ? ArchiveFormat.Tar : ArchiveFormat.Zip;
+        var format = SelectedFormat;
         var name = BuildArchiveName(format);
         string output;
         try
@@ -300,7 +302,7 @@ public partial class MainWindow : Window
                 {
                     Type = "compress",
                     ArchivePath = output,
-                    Format = format == ArchiveFormat.Tar ? "tar" : "zip",
+                    Format = format.Key(),
                     Files = _files.Select(item => item.SourcePath).ToList()
                 }, destination, name);
             }
@@ -319,21 +321,26 @@ public partial class MainWindow : Window
         }
     }
 
+    private ArchiveFormat SelectedFormat =>
+        SevenZipFormatTab?.IsChecked == true ? ArchiveFormat.SevenZip :
+        TarGzFormatTab?.IsChecked == true ? ArchiveFormat.TarGz :
+        TarBz2FormatTab?.IsChecked == true ? ArchiveFormat.TarBz2 :
+        TarFormatTab?.IsChecked == true ? ArchiveFormat.Tar :
+        ArchiveFormat.Zip;
+
     private string BuildArchiveName(ArchiveFormat format)
     {
         var name = SanitizeFileName(ArchiveNameBox?.Text ?? string.Empty);
-        foreach (var known in new[] { ".zip", ".tar" })
+        foreach (var known in new[] { ".tar.gz", ".tar.bz2", ".tgz", ".tbz2", ".zip", ".tar", ".7z" })
         {
-            if (name.EndsWith(known, StringComparison.OrdinalIgnoreCase))
-            {
-                name = name[..^known.Length];
-                break;
-            }
+            if (!name.EndsWith(known, StringComparison.OrdinalIgnoreCase)) continue;
+            name = name[..^known.Length];
+            break;
         }
 
         name = name.Trim();
         if (name.Length == 0) name = $"mzip-{DateTime.Now:yyyyMMdd-HHmm}";
-        return name + (format == ArchiveFormat.Tar ? ".tar" : ".zip");
+        return name + format.Extension();
     }
 
     private void UpdateOutputHint()
@@ -341,8 +348,7 @@ public partial class MainWindow : Window
         if (OutputHintText is null || DestinationBox is null) return;
         try
         {
-            var format = TarFormatTab?.IsChecked == true ? ArchiveFormat.Tar : ArchiveFormat.Zip;
-            var name = BuildArchiveName(format);
+            var name = BuildArchiveName(SelectedFormat);
             OutputHintText.Text = name;
             OutputHintText.ToolTip = Path.Combine(DestinationBox.Text.Trim(), name);
         }
@@ -461,7 +467,9 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void Extract_Click(object sender, RoutedEventArgs e)
+    private async void Extract_Click(object sender, RoutedEventArgs e) => await ExtractCoreAsync();
+
+    private async Task ExtractCoreAsync()
     {
         if (_busy || _archivePath is null) return;
 
@@ -728,6 +736,90 @@ public partial class MainWindow : Window
         {
             Progress.IsIndeterminate = false;
             EndOperation();
+        }
+    }
+
+    // ---------- Menú contextual de Windows ----------
+
+    internal async Task RunShellAsync(ShellRequest request)
+    {
+        if (request.Mode == "compress")
+        {
+            CompressTab.IsChecked = true;
+            await AddPathsAsync(new[] { request.Path });
+            return;
+        }
+
+        var archive = request.Path;
+        if (!File.Exists(archive))
+        {
+            ShowWarning($"No se encontró «{archive}».");
+            return;
+        }
+        if (!ArchiveService.IsArchive(archive))
+        {
+            ShowWarning("El archivo no es un comprimido compatible.");
+            return;
+        }
+
+        ExtractTab.IsChecked = true;
+        await LoadArchiveAsync(archive);
+        if (_archivePath is null || request.Mode == "open") return;
+
+        string destination;
+        try
+        {
+            var parent = Path.GetDirectoryName(archive);
+            if (string.IsNullOrEmpty(parent))
+                parent = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+
+            destination = request.Mode == "extract-sub"
+                ? Path.Combine(parent, StripArchiveExtension(Path.GetFileName(archive)))
+                : parent;
+        }
+        catch (Exception ex)
+        {
+            ShowError("No se pudo preparar la extracción", ex);
+            return;
+        }
+
+        ExtractDestBox.Text = destination;
+        OverwriteCheck.IsChecked = true;
+        await ExtractCoreAsync();
+    }
+
+    private void UpdateShellIntegrationState()
+    {
+        if (ShellIntegrationCheck is null) return;
+        _shellInitializing = true;
+        try
+        {
+            ShellIntegrationCheck.IsChecked = ShellIntegration.IsRegistered();
+        }
+        finally
+        {
+            _shellInitializing = false;
+        }
+    }
+
+    private void ShellIntegration_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_shellInitializing) return;
+
+        var enable = ShellIntegrationCheck.IsChecked == true;
+        try
+        {
+            ShellIntegration.Apply(enable);
+            SetStatus(enable
+                ? "Mzip añadido al menú contextual de Windows."
+                : "Mzip eliminado del menú contextual de Windows.");
+        }
+        catch (Exception ex)
+        {
+            _shellInitializing = true;
+            ShellIntegrationCheck.IsChecked = !enable;
+            _shellInitializing = false;
+            ShowError("No se pudo actualizar el menú contextual", ex);
         }
     }
 

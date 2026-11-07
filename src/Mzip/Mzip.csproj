@@ -10,9 +10,9 @@
     <ApplicationIcon>mzip.ico</ApplicationIcon>
     <AssemblyName>Mzip</AssemblyName>
     <RootNamespace>Mzip</RootNamespace>
-    <Version>1.1.0</Version>
-    <FileVersion>1.1.0.0</FileVersion>
-    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <Version>1.2.0</Version>
+    <FileVersion>1.2.0.0</FileVersion>
+    <AssemblyVersion>1.2.0.0</AssemblyVersion>
     <Company>MSoft</Company>
     <Product>Mzip</Product>
     <Description>Compresor y extractor de archivos</Description>
@@ -31,6 +31,11 @@
   <ItemGroup>
     <Resource Include="mzip.ico" />
     <Resource Include="Theme.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 7-Zip standalone para crear 7z con compresión sólida LZMA2 (dominio público). -->
+    <EmbeddedResource Include="Tools\7zr.exe" LogicalName="Mzip.Tools.7zr.exe" />
   </ItemGroup>
 
 </Project>
