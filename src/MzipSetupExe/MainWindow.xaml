@@ -31,15 +31,8 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Border Width="54" Height="54" CornerRadius="15" Background="{StaticResource AccentGradient}">
-                <Viewbox Width="28" Height="28">
-                    <Canvas Width="24" Height="24">
-                        <Path Data="M3 8 H21 V20 H3 Z M3 8 L5 4 H19 L21 8 M9 12 H15"
-                              Stroke="#1B1207" StrokeThickness="1.9" StrokeLineJoin="Round"
-                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
-                    </Canvas>
-                </Viewbox>
-            </Border>
+            <Image Width="54" Height="54" Source="Assets/mzip-logo.png"
+                   RenderOptions.BitmapScalingMode="HighQuality" />
 
             <StackPanel Grid.Column="1" Margin="15,0,0,0" VerticalAlignment="Center">
                 <TextBlock Text="Instalar Mzip" FontSize="24" FontWeight="Bold" />

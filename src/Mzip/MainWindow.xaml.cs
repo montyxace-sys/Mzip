@@ -43,7 +43,7 @@ public partial class MainWindow : Window
         ExtractDestBox.Text = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
 
         UpdateAdminState();
-        var version = typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "1.2.0";
+        var version = typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "1.2.1";
         VersionLabel.Text = $"v{version} · MSoft";
         UpdateFilesState();
         UpdateOutputHint();

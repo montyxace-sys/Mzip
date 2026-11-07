@@ -32,15 +32,8 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Border Width="54" Height="54" CornerRadius="15" Background="{StaticResource AccentGradient}">
-                <Viewbox Width="28" Height="28">
-                    <Canvas Width="24" Height="24">
-                        <Path Data="M3 8 H21 V20 H3 Z M3 8 L5 4 H19 L21 8 M9 12 H15"
-                              Stroke="#1B1207" StrokeThickness="1.9" StrokeLineJoin="Round"
-                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
-                    </Canvas>
-                </Viewbox>
-            </Border>
+            <Image Width="54" Height="54" Source="Assets/mzip-logo.png"
+                   RenderOptions.BitmapScalingMode="HighQuality" />
 
             <StackPanel Grid.Column="1" Margin="15,0,0,0" VerticalAlignment="Center">
                 <TextBlock Text="Mzip" FontSize="26" FontWeight="Bold" />
@@ -56,7 +49,7 @@
                                    Foreground="{StaticResource SuccessBrush}" Margin="7,0,0,0" />
                     </StackPanel>
                 </Border>
-                <TextBlock x:Name="VersionLabel" Text="v1.1.0 · MSoft" FontSize="10.5" Foreground="{StaticResource FaintBrush}"
+                <TextBlock x:Name="VersionLabel" Text="v1.2.1 · MSoft" FontSize="10.5" Foreground="{StaticResource FaintBrush}"
                            HorizontalAlignment="Right" Margin="0,6,2,0" />
             </StackPanel>
         </Grid>

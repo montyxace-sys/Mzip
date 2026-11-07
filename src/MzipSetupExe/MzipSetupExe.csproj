@@ -10,9 +10,9 @@
     <ApplicationIcon>mzip.ico</ApplicationIcon>
     <AssemblyName>MzipSetup</AssemblyName>
     <RootNamespace>MzipSetupExe</RootNamespace>
-    <Version>1.2.0</Version>
-    <FileVersion>1.2.0.0</FileVersion>
-    <AssemblyVersion>1.2.0.0</AssemblyVersion>
+    <Version>1.2.1</Version>
+    <FileVersion>1.2.1.0</FileVersion>
+    <AssemblyVersion>1.2.1.0</AssemblyVersion>
     <Company>MSoft</Company>
     <Product>Mzip</Product>
     <Description>Instalador de Mzip</Description>
@@ -38,6 +38,7 @@
   <ItemGroup>
     <Resource Include="mzip.ico" />
     <Resource Include="Theme.xaml" />
+    <Resource Include="Assets\mzip-logo.png" />
   </ItemGroup>
 
 </Project>

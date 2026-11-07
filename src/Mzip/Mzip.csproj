@@ -10,9 +10,9 @@
     <ApplicationIcon>mzip.ico</ApplicationIcon>
     <AssemblyName>Mzip</AssemblyName>
     <RootNamespace>Mzip</RootNamespace>
-    <Version>1.2.0</Version>
-    <FileVersion>1.2.0.0</FileVersion>
-    <AssemblyVersion>1.2.0.0</AssemblyVersion>
+    <Version>1.2.1</Version>
+    <FileVersion>1.2.1.0</FileVersion>
+    <AssemblyVersion>1.2.1.0</AssemblyVersion>
     <Company>MSoft</Company>
     <Product>Mzip</Product>
     <Description>Compresor y extractor de archivos</Description>
@@ -31,6 +31,7 @@
   <ItemGroup>
     <Resource Include="mzip.ico" />
     <Resource Include="Theme.xaml" />
+    <Resource Include="Assets\mzip-logo.png" />
   </ItemGroup>
 
   <ItemGroup>
