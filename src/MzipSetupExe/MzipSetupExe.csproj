@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>mzip.ico</ApplicationIcon>
+    <AssemblyName>MzipSetup</AssemblyName>
+    <RootNamespace>MzipSetupExe</RootNamespace>
+    <Version>1.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <Company>MSoft</Company>
+    <Product>Mzip</Product>
+    <Description>Instalador de Mzip</Description>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <SatelliteResourceLanguages>es;en</SatelliteResourceLanguages>
+    <MzipPayloadPath Condition="'$(MzipPayloadPath)' == ''">..\Mzip\bin\publish\portable\Mzip.exe</MzipPayloadPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="$(MzipPayloadPath)" LogicalName="Mzip.exe"
+                      Condition="Exists('$(MzipPayloadPath)')" />
+  </ItemGroup>
+
+  <Target Name="ComprobarPayload" BeforeTargets="BeforeBuild"
+          Condition="'$(Configuration)' == 'Release' and !Exists('$(MzipPayloadPath)')">
+    <Error Text="No se encontró $(MzipPayloadPath). Publica antes la aplicación: dotnet publish src/Mzip/Mzip.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o src/Mzip/bin/publish/portable" />
+  </Target>
+
+  <ItemGroup>
+    <Resource Include="mzip.ico" />
+    <Resource Include="Theme.xaml" />
+  </ItemGroup>
+
+</Project>

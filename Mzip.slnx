@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Mzip/Mzip.csproj" />
+    <Project Path="src/MzipSetupExe/MzipSetupExe.csproj" />
+  </Folder>
+</Solution>

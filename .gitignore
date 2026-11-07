@@ -1,0 +1,10 @@
+bin/
+obj/
+out/
+dist/
+.vs/
+*.user
+*.suo
+*.pdb
+*.nupkg
+TestResults/
