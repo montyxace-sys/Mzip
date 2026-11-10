@@ -99,7 +99,9 @@ internal static class Program
         Check("0 B", FileItem.FormatSize(0) == "0 B");
         Check("512 B", FileItem.FormatSize(512) == "512 B");
         Check("1 KB", FileItem.FormatSize(1024) == "1 KB");
-        Check("1,5 KB", FileItem.FormatSize(1536) == "1,5 KB");
+        // El formato depende de la cultura del sistema: en CI (en-US) sale "1.5 KB"
+        // y en un equipo en español, "1,5 KB". Se comprueba el valor, no el separador.
+        Check("1,5 KB", FileItem.FormatSize(1536).Replace('.', ',') == "1,5 KB");
         Check("1 MB", FileItem.FormatSize(1024 * 1024) == "1 MB");
         Check("negativo se trata como 0", FileItem.FormatSize(-5) == "0 B");
         Check("etiqueta de extensión", FileItem.ExtensionBadge("foto.png") == "PNG");
