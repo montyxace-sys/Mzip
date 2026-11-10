@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>Mzip.CoreTests</AssemblyName>
+    <RootNamespace>Mzip.CoreTests</RootNamespace>
+    <!-- Mzip se publica autocontenido y en un solo archivo; las pruebas heredan esos
+         ajustes para poder referenciarlo (NETSDK1151). -->
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Mzip\Mzip.csproj" />
+  </ItemGroup>
+
+
+</Project>

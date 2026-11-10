@@ -3,4 +3,7 @@
     <Project Path="src/Mzip/Mzip.csproj" />
     <Project Path="src/MzipSetupExe/MzipSetupExe.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Mzip.CoreTests/Mzip.CoreTests.csproj" />
+  </Folder>
 </Solution>

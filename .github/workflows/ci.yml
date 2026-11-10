@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Compilar y probar
+    runs-on: windows-latest
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Restaurar
+        shell: pwsh
+        run: dotnet restore Mzip.slnx
+
+      # El instalador embebe el ejecutable portable, así que en Release hay que
+      # publicarlo antes de compilar la solución o el build falla pidiéndolo.
+      - name: Publicar la aplicación
+        shell: pwsh
+        run: >
+          dotnet publish src/Mzip/Mzip.csproj -c Release -r win-x64
+          --self-contained true -p:PublishSingleFile=true
+          -o src/Mzip/bin/publish/portable
+
+      - name: Compilar
+        shell: pwsh
+        run: dotnet build Mzip.slnx --no-restore -c Release --warnaserror
+
+      # Las pruebas son una consola que devuelve 0 cuando todo pasa.
+      - name: Probar
+        shell: pwsh
+        run: dotnet run --project tests/Mzip.CoreTests/Mzip.CoreTests.csproj -c Release --no-build

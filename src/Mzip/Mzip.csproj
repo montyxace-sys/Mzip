@@ -29,6 +29,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- El proyecto de pruebas comprueba también los tipos internos (ShellArguments). -->
+    <InternalsVisibleTo Include="Mzip.CoreTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Resource Include="mzip.ico" />
     <Resource Include="Theme.xaml" />
     <Resource Include="Assets\mzip-logo.png" />
